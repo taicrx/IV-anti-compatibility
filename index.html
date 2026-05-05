@@ -268,9 +268,8 @@ let drugIndex = [];
 let selectedDrug = null;
 
 const COL = {
-  drugName: "分名",         // ← 這個是你實際的藥名欄
-  genericName: "分名",      // ← 先暫時用同一欄
-
+  drugName: "商品名稱",
+  genericName: "成分名",
   diluent: "稀釋液 Diluent",
   status: "判定 Status",
   comment: "備註",
@@ -315,7 +314,7 @@ function escapeHtml(text) {
 
 async function loadData() {
   try {
-    const res = await fetch(csvUrl + "?v=" + Date.now());
+    const res = await fetch(csvUrl + "&v=" + Date.now());
     const text = await res.text();
 
     Papa.parse(text, {
