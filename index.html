@@ -257,8 +257,12 @@ input:focus {
 </div>
 
 <script>
-const csvUrl = "https://docs.google.com/spreadsheets/d/1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc/gviz/tq?tqx=out:csv&sheet=Diluent_Anti";
+const sheetId = "1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc";
+const gid = "824980974";
 
+const csvUrl =
+  `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+  
 let rawRows = [];
 let drugIndex = [];
 let selectedDrug = null;
