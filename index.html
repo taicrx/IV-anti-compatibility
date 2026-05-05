@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>抗生素稀釋液與保存查詢</title>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<style>
+:root {
+  --primary:#0f6b8f;
+  --primary-dark:#084f6a;
+  --bg:#f5f8fa;
+  --card:#fff;
+  --border:#d9e2e7;
+  --text:#1f2933;
+  --muted:#6b7280;
+  --success:#0f766e;
+  --danger:#b91c1c;
+  --warning:#92400e;
+}
+
+* { box-sizing:border-box; }
+
+body {
+  margin:0;
+  font-family:"Noto Sans TC","Segoe UI",Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.container {
+  max-width:980px;
+  margin:32px auto;
+  padding:20px;
+}
+
+.header {
+  border-left:6px solid var(--primary);
+  padding-left:18px;
+  margin-bottom:24px;
+}
+
+.header h1 {
+  margin:0;
+  font-size:30px;
+  color:var(--primary-dark);
+}
+
+.header p {
+  margin:8px 0 0;
+  color:var(--muted);
+  line-height:1.6;
+}
+
+.card {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:24px;
+  box-shadow:0 8px 24px rgba(15,107,143,0.08);
+}
+
+.input-wrap {
+  position:relative;
+}
+
+label {
+  display:block;
+  font-weight:800;
+  color:var(--primary-dark);
+  margin-bottom:8px;
+}
+
+input {
+  width:100%;
+  padding:14px 16px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  font-size:17px;
+  outline:none;
+}
+
+input:focus {
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(15,107,143,.15);
+}
+
+.suggestions {
+  display:none;
+  position:absolute;
+  z-index:9999;
+  width:100%;
+  left:0;
+  margin-top:8px;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:12px;
+  max-height:280px;
+  overflow-y:auto;
+  box-shadow:0 8px 20px rgba(0,0,0,.08);
+}
+
+.suggestion-item {
+  padding:12px 14px;
+  border-bottom:1px solid #eef2f5;
+  cursor:pointer;
+}
+
+.suggestion-item:hover {
+  background:#edf7fb;
+}
+
+.drug-name {
+  font-weight:800;
+}
+
+.drug-meta {
+  margin-top:4px;
+  color:var(--muted);
+  font-size:14px;
+}
+
+.status {
+  margin-top:16px;
+  color:var(--muted);
+  font-size:14px;
+}
+
+.result {
+  display:none;
+  margin-top:24px;
+}
+
+.result-title {
+  font-size:22px;
+  font-weight:900;
+  color:var(--primary-dark);
+  margin-bottom:6px;
+}
+
+.generic {
+  color:var(--muted);
+  margin-bottom:18px;
+}
+
+.section-title {
+  margin:22px 0 10px;
+  font-size:18px;
+  font-weight:900;
+  color:var(--primary-dark);
+}
+
+.solution-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:14px;
+}
+
+.solution-card {
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:16px;
+  background:#fbfdfe;
+}
+
+.solution-name {
+  font-weight:900;
+  font-size:17px;
+  margin-bottom:8px;
+}
+
+.badge {
+  display:inline-block;
+  padding:6px 12px;
+  border-radius:999px;
+  font-weight:900;
+  font-size:14px;
+  margin-bottom:10px;
+}
+
+.compatible {
+  background:#d1fae5;
+  color:var(--success);
+}
+
+.incompatible {
+  background:#fee2e2;
+  color:var(--danger);
+}
+
+.conditional {
+  background:#fef3c7;
+  color:var(--warning);
+}
+
+.info {
+  font-size:14px;
+  line-height:1.7;
+  color:var(--text);
+}
+
+.info b {
+  color:var(--primary-dark);
+}
+
+.alert {
+  margin-top:24px;
+  padding:14px 16px;
+  border-radius:12px;
+  background:#fff7ed;
+  color:#9a3412;
+  border:1px solid #fed7aa;
+  line-height:1.7;
+}
+
+.empty {
+  padding:18px;
+  border-radius:12px;
+  background:#f3f4f6;
+  color:var(--muted);
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>抗生素稀釋液與保存查詢</h1>
+    <p>輸入商品名或成分名，選擇藥物後顯示可用稀釋液、相容性、保存時間與給藥資訊。</p>
+  </div>
+
+  <div class="card">
+    <div class="input-wrap">
+      <label for="drugInput">藥物查詢</label>
+      <input
+        id="drugInput"
+        type="text"
+        placeholder="例如：Amikacin / Cefepime / Vancomycin"
+        autocomplete="off"
+      />
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+
+    <div id="status" class="status">資料載入中...</div>
+    <div id="result" class="result"></div>
+
+    <div class="alert">
+      本工具僅供院內抗微生物製劑稀釋液與保存資訊快速查詢。
+      若涉及特殊濃度、TPN、化療藥、血品、高風險藥品或臨床狀況特殊者，
+      仍應依藥品仿單、院內規範與藥劑科確認。
+    </div>
+  </div>
+
+</div>
+
+<script>
+const csvUrl = "https://docs.google.com/spreadsheets/d/1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc/edit?usp=sharing";
+
+let rawRows = [];
+let drugIndex = [];
+let selectedDrug = null;
+
+const COL = {
+  drugName: "Drug 商品名稱",
+  genericName: "Drug 成分名",
+  diluent: "稀釋液 Diluent",
+  status: "判定 Status",
+  comment: "備註",
+  roomTemp: "常溫保存",
+  refrigerated: "冷藏保存",
+  ivp: "IVP",
+  ivf: "IVF",
+  im: "IM",
+  note: "Note"
+};
+
+function clean(v) {
+  return String(v ?? "").trim();
+}
+
+function normalize(v) {
+  return clean(v)
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/\s+/g, " ");
+}
+
+function compact(v) {
+  return normalize(v).replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+async function loadData() {
+  try {
+    const res = await fetch(csvUrl + "?v=" + Date.now());
+    const text = await res.text();
+
+    Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => clean(h),
+      complete: results => {
+        rawRows = results.data;
+        buildDrugIndex();
+
+        document.getElementById("status").textContent =
+          `資料載入完成：${rawRows.length.toLocaleString()} 筆資料；藥品索引 ${drugIndex.length.toLocaleString()} 筆`;
+      },
+      error: err => {
+        document.getElementById("status").textContent =
+          "CSV 解析失敗：" + err.message;
+      }
+    });
+  } catch (err) {
+    document.getElementById("status").textContent =
+      "無法讀取 Google Sheet CSV，請確認發布權限。";
+    console.error(err);
+  }
+}
+
+function buildDrugIndex() {
+  const map = new Map();
+
+  rawRows.forEach(row => {
+    const drugName = clean(row[COL.drugName]);
+    const genericName = clean(row[COL.genericName]);
+
+    if (!drugName && !genericName) return;
+
+    const key = `${normalize(drugName)}|${normalize(genericName)}`;
+
+    if (!map.has(key)) {
+      const aliases = buildAliases(drugName, genericName);
+
+      map.set(key, {
+        drugName,
+        genericName,
+        aliases
+      });
+    }
+  });
+
+  drugIndex = Array.from(map.values());
+}
+
+function buildAliases(drugName, genericName) {
+  const aliases = new Set();
+
+  [drugName, genericName].forEach(v => {
+    const n = normalize(v);
+    const c = compact(v);
+
+    if (!n) return;
+
+    aliases.add(n);
+    aliases.add(c);
+
+    n.split(/[\s\/\-\(\),.;:+]+/).forEach(part => {
+      if (part) aliases.add(part);
+    });
+  });
+
+  return Array.from(aliases);
+}
+
+function levenshtein(a,b) {
+  a = normalize(a);
+  b = normalize(b);
+
+  const matrix = Array.from({length:b.length+1},()=>[]);
+
+  for (let i=0;i<=b.length;i++) matrix[i][0]=i;
+  for (let j=0;j<=a.length;j++) matrix[0][j]=j;
+
+  for (let i=1;i<=b.length;i++) {
+    for (let j=1;j<=a.length;j++) {
+      matrix[i][j] =
+        b[i-1] === a[j-1]
+          ? matrix[i-1][j-1]
+          : Math.min(
+              matrix[i-1][j-1]+1,
+              matrix[i][j-1]+1,
+              matrix[i-1][j]+1
+            );
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
+
+function scoreAlias(query, alias) {
+  const q = normalize(query);
+  const a = normalize(alias);
+  const qc = compact(query);
+  const ac = compact(alias);
+
+  if (!q || !a) return 0;
+
+  if (a === q) return 120;
+  if (ac === qc) return 115;
+  if (a.startsWith(q)) return 100;
+  if (ac.startsWith(qc)) return 95;
+  if (a.includes(q)) return 80;
+  if (ac.includes(qc)) return 78;
+
+  if (q.length >= 3) {
+    const d = levenshtein(q,a);
+    const ratio = d / Math.max(q.length,a.length);
+
+    if (d <= 2) return 60 - d * 8;
+    if (ratio <= 0.35) return 45;
+  }
+
+  return 0;
+}
+
+function searchDrugs(keyword) {
+  if (!keyword.trim()) return [];
+
+  return drugIndex
+    .map(drug => {
+      const score = Math.max(...drug.aliases.map(a => scoreAlias(keyword,a)));
+      return {...drug, score};
+    })
+    .filter(d => d.score > 0)
+    .sort((a,b) => b.score - a.score)
+    .slice(0,12);
+}
+
+const input = document.getElementById("drugInput");
+const suggestions = document.getElementById("suggestions");
+
+input.addEventListener("input", () => {
+  selectedDrug = null;
+  const matches = searchDrugs(input.value);
+
+  if (!input.value.trim()) {
+    suggestions.style.display = "none";
+    return;
+  }
+
+  if (matches.length === 0) {
+    suggestions.innerHTML = `
+      <div class="suggestion-item">
+        <div class="drug-name">查無候選藥品</div>
+        <div class="drug-meta">請改用商品名或成分名片段</div>
+      </div>`;
+    suggestions.style.display = "block";
+    return;
+  }
+
+  suggestions.dataset.matches = JSON.stringify(matches);
+  suggestions.innerHTML = matches.map((d,i) => `
+    <div class="suggestion-item" onclick="selectDrug(${i})">
+      <div class="drug-name">${escapeHtml(d.drugName || d.genericName)}</div>
+      <div class="drug-meta">成分：${escapeHtml(d.genericName || "-")}</div>
+    </div>
+  `).join("");
+
+  suggestions.style.display = "block";
+});
+
+function selectDrug(index) {
+  const matches = JSON.parse(suggestions.dataset.matches || "[]");
+  selectedDrug = matches[index];
+
+  if (!selectedDrug) return;
+
+  input.value = selectedDrug.drugName || selectedDrug.genericName;
+  suggestions.style.display = "none";
+  renderDrugInfo(selectedDrug);
+}
+
+function renderDrugInfo(drug) {
+  const rows = rawRows.filter(row =>
+    normalize(row[COL.drugName]) === normalize(drug.drugName) &&
+    normalize(row[COL.genericName]) === normalize(drug.genericName)
+  );
+
+  const result = document.getElementById("result");
+  result.style.display = "block";
+
+  if (rows.length === 0) {
+    result.innerHTML = `<div class="empty">查無此藥品相關稀釋液資料。</div>`;
+    return;
+  }
+
+  const compatible = rows.filter(r => normalizeStatus(r[COL.status]) === "compatible");
+  const conditional = rows.filter(r => normalizeStatus(r[COL.status]) === "conditional");
+  const incompatible = rows.filter(r => normalizeStatus(r[COL.status]) === "incompatible");
+
+  result.innerHTML = `
+    <div class="result-title">${escapeHtml(drug.drugName)}</div>
+    <div class="generic">${escapeHtml(drug.genericName)}</div>
+
+    ${renderSection("可用稀釋液", compatible)}
+    ${renderSection("條件使用 / 需注意", conditional)}
+    ${renderSection("不建議或不相容", incompatible)}
+  `;
+}
+
+function normalizeStatus(value) {
+  const v = normalize(value);
+
+  if (v.includes("不相容") || v.includes("incompatible") || v === "i") {
+    return "incompatible";
+  }
+
+  if (v.includes("條件") || v.includes("c/i") || v.includes("conditional")) {
+    return "conditional";
+  }
+
+  if (v.includes("相容") || v.includes("compatible") || v === "c") {
+    return "compatible";
+  }
+
+  return "conditional";
+}
+
+function renderSection(title, rows) {
+  if (rows.length === 0) return "";
+
+  return `
+    <div class="section-title">${title}</div>
+    <div class="solution-grid">
+      ${rows.map(renderSolutionCard).join("")}
+    </div>
+  `;
+}
+
+function renderSolutionCard(row) {
+  const status = normalizeStatus(row[COL.status]);
+  const badgeClass =
+    status === "compatible" ? "compatible" :
+    status === "incompatible" ? "incompatible" :
+    "conditional";
+
+  const badgeText =
+    status === "compatible" ? "可用" :
+    status === "incompatible" ? "不相容" :
+    "條件使用";
+
+  return `
+    <div class="solution-card">
+      <div class="solution-name">${escapeHtml(row[COL.diluent])}</div>
+      <div class="badge ${badgeClass}">${badgeText}</div>
+
+      <div class="info">
+        ${infoLine("常溫保存", row[COL.roomTemp])}
+        ${infoLine("冷藏保存", row[COL.refrigerated])}
+        ${infoLine("IVP", row[COL.ivp])}
+        ${infoLine("IVF", row[COL.ivf])}
+        ${infoLine("IM", row[COL.im])}
+        ${infoLine("備註", row[COL.comment])}
+        ${infoLine("Note", row[COL.note])}
+      </div>
+    </div>
+  `;
+}
+
+function infoLine(label, value) {
+  const v = clean(value);
+  if (!v) return "";
+  return `<div><b>${label}：</b>${escapeHtml(v)}</div>`;
+}
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".input-wrap")) {
+    suggestions.style.display = "none";
+  }
+});
+
+loadData();
+</script>
+</body>
+</html>
