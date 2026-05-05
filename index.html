@@ -62,9 +62,7 @@ body {
   box-shadow:0 8px 24px rgba(15,107,143,0.08);
 }
 
-.input-wrap {
-  position:relative;
-}
+.input-wrap { position:relative; }
 
 label {
   display:block;
@@ -108,13 +106,9 @@ input:focus {
   cursor:pointer;
 }
 
-.suggestion-item:hover {
-  background:#edf7fb;
-}
+.suggestion-item:hover { background:#edf7fb; }
 
-.drug-name {
-  font-weight:800;
-}
+.drug-name { font-weight:800; }
 
 .drug-meta {
   margin-top:4px;
@@ -201,9 +195,7 @@ input:focus {
   color:var(--text);
 }
 
-.info b {
-  color:var(--primary-dark);
-}
+.info b { color:var(--primary-dark); }
 
 .alert {
   margin-top:24px;
@@ -259,34 +251,16 @@ input:focus {
 <script>
 const csvUrl =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZ7R-WIAIgmN28CW-64lT-x0ZE_JLka-gJUkTMthfgD0gTIRp9YxMG97aNW0JY5zKWiidOiPNjYeyt/pub?gid=824980974&single=true&output=csv";
-  
+
 let rawRows = [];
 let drugIndex = [];
 let selectedDrug = null;
+let COL = {};
 
-const COL = {
-  drugName: "Drug 商品名稱",
-  genericName: "Drug 成分名",
-  diluent: "稀釋液 Diluent",
-  status: "判定 Status",
-  comment: "備註",
-  roomTemp: "常溫保存",
-  refrigerated: "冷藏保存",
-  ivp: "IVP",
-  ivf: "IVF",
-  im: "IM",
-  note: "Note"
-};
-
-function findColumn(headers, keywords) {
-  return headers.find(h =>
-    keywords.some(k => h.includes(k))
-  );
-}  
-
-  
 function clean(v) {
-  return String(v ?? "").trim();
+  return String(v ?? "")
+    .replace(/^\uFEFF/, "")
+    .trim();
 }
 
 function normalize(v) {
@@ -298,6 +272,44 @@ function normalize(v) {
 
 function compact(v) {
   return normalize(v).replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
+}
+
+function normalizeHeader(v) {
+  return clean(v)
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .replace(/[＿_－\-–—]/g, "");
+}
+
+function pickColumn(headers, keywords) {
+  const normalized = headers.map(h => ({
+    original: h,
+    norm: normalizeHeader(h)
+  }));
+
+  return normalized.find(h =>
+    keywords.some(k => h.norm.includes(normalizeHeader(k)))
+  )?.original || "";
+}
+
+function resolveColumns(headers) {
+  COL = {
+    drugName: pickColumn(headers, ["Drug商品名稱", "商品名稱", "drugname", "drug"]),
+    genericName: pickColumn(headers, ["Drug成分名", "成分名", "genericname", "generic"]),
+    diluent: pickColumn(headers, ["稀釋液", "Diluent"]),
+    status: pickColumn(headers, ["判定", "Status"]),
+    comment: pickColumn(headers, ["備註"]),
+    roomTemp: pickColumn(headers, ["常溫保存"]),
+    refrigerated: pickColumn(headers, ["冷藏保存"]),
+    ivp: pickColumn(headers, ["IVP"]),
+    ivf: pickColumn(headers, ["IVF"]),
+    im: pickColumn(headers, ["IM"]),
+    note: pickColumn(headers, ["Note"])
+  };
+
+  console.log("CSV headers:", headers);
+  console.log("Resolved COL:", COL);
 }
 
 function escapeHtml(text) {
@@ -319,11 +331,22 @@ async function loadData() {
       skipEmptyLines: true,
       transformHeader: h => clean(h),
       complete: results => {
+        const headers = results.meta.fields || [];
+        resolveColumns(headers);
+
         rawRows = results.data;
         buildDrugIndex();
 
+        const missing = [];
+        if (!COL.drugName) missing.push("商品名稱");
+        if (!COL.genericName) missing.push("成分名");
+        if (!COL.diluent) missing.push("稀釋液");
+        if (!COL.status) missing.push("判定 Status");
+
         document.getElementById("status").textContent =
-          `資料載入完成：${rawRows.length.toLocaleString()} 筆資料；藥品索引 ${drugIndex.length.toLocaleString()} 筆`;
+          `資料載入完成：${rawRows.length.toLocaleString()} 筆資料；` +
+          `藥品索引 ${drugIndex.length.toLocaleString()} 筆` +
+          (missing.length ? `；缺少欄位：${missing.join("、")}` : "");
       },
       error: err => {
         document.getElementById("status").textContent =
@@ -337,12 +360,16 @@ async function loadData() {
   }
 }
 
+function get(row, col) {
+  return clean(row[col]);
+}
+
 function buildDrugIndex() {
   const map = new Map();
 
   rawRows.forEach(row => {
-    const drugName = clean(row[COL.drugName]);
-    const genericName = clean(row[COL.genericName]);
+    const drugName = get(row, COL.drugName);
+    const genericName = get(row, COL.genericName);
 
     if (!drugName && !genericName) return;
 
@@ -492,8 +519,8 @@ function selectDrug(index) {
 
 function renderDrugInfo(drug) {
   const rows = rawRows.filter(row =>
-    normalize(row[COL.drugName]) === normalize(drug.drugName) &&
-    normalize(row[COL.genericName]) === normalize(drug.genericName)
+    normalize(get(row, COL.drugName)) === normalize(drug.drugName) &&
+    normalize(get(row, COL.genericName)) === normalize(drug.genericName)
   );
 
   const result = document.getElementById("result");
@@ -504,9 +531,9 @@ function renderDrugInfo(drug) {
     return;
   }
 
-  const compatible = rows.filter(r => normalizeStatus(r[COL.status]) === "compatible");
-  const conditional = rows.filter(r => normalizeStatus(r[COL.status]) === "conditional");
-  const incompatible = rows.filter(r => normalizeStatus(r[COL.status]) === "incompatible");
+  const compatible = rows.filter(r => normalizeStatus(get(r, COL.status)) === "compatible");
+  const conditional = rows.filter(r => normalizeStatus(get(r, COL.status)) === "conditional");
+  const incompatible = rows.filter(r => normalizeStatus(get(r, COL.status)) === "incompatible");
 
   result.innerHTML = `
     <div class="result-title">${escapeHtml(drug.drugName)}</div>
@@ -548,7 +575,7 @@ function renderSection(title, rows) {
 }
 
 function renderSolutionCard(row) {
-  const status = normalizeStatus(row[COL.status]);
+  const status = normalizeStatus(get(row, COL.status));
   const badgeClass =
     status === "compatible" ? "compatible" :
     status === "incompatible" ? "incompatible" :
@@ -561,17 +588,17 @@ function renderSolutionCard(row) {
 
   return `
     <div class="solution-card">
-      <div class="solution-name">${escapeHtml(row[COL.diluent])}</div>
+      <div class="solution-name">${escapeHtml(get(row, COL.diluent))}</div>
       <div class="badge ${badgeClass}">${badgeText}</div>
 
       <div class="info">
-        ${infoLine("常溫保存", row[COL.roomTemp])}
-        ${infoLine("冷藏保存", row[COL.refrigerated])}
-        ${infoLine("IVP", row[COL.ivp])}
-        ${infoLine("IVF", row[COL.ivf])}
-        ${infoLine("IM", row[COL.im])}
-        ${infoLine("備註", row[COL.comment])}
-        ${infoLine("Note", row[COL.note])}
+        ${infoLine("常溫保存", get(row, COL.roomTemp))}
+        ${infoLine("冷藏保存", get(row, COL.refrigerated))}
+        ${infoLine("IVP", get(row, COL.ivp))}
+        ${infoLine("IVF", get(row, COL.ivf))}
+        ${infoLine("IM", get(row, COL.im))}
+        ${infoLine("備註", get(row, COL.comment))}
+        ${infoLine("Note", get(row, COL.note))}
       </div>
     </div>
   `;
